@@ -267,3 +267,26 @@ async def add_user(email: str = Body(...), password: str = Body(...)):
         raise HTTPException(status_code=400, detail=f"Supabase API error: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+    
+@app.post("/login")
+async def login(email: str = Body(...), password: str = Body(...)):
+    try:
+        # Fetch user from Supabase by email
+        response = supabase.table("users").select("*").eq("email", email).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        user = response.data[0]
+        
+        # Compare password
+        if user.get("password") != password:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        return {"uid": user.get("uid")}
+
+    except postgrest.exceptions.APIError as e:
+        raise HTTPException(status_code=400, detail=f"Supabase API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+    
