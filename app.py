@@ -14,6 +14,10 @@ app = FastAPI()
 # ----------------------
 # all functions
 # ----------------------
+@app.get("/")
+def root():
+    return {"message": "CivicLink backend running!"}
+
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371  # Earth radius in km
     dlat = math.radians(lat2 - lat1)
