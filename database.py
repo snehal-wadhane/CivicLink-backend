@@ -5,6 +5,6 @@ from dotenv import load_dotenv
 load_dotenv()
 # Load environment variables
 url: str = os.environ.get("SUPABASE_URL")
-key: str = os.environ.get("SUPABASE_KEY")
+key: str = os.environ.get("SUPABASE_SECRET")
 supabase: Client = create_client(url, key)
 

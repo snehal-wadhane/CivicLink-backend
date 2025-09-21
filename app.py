@@ -11,6 +11,7 @@ import cv2
 from ultralytics import YOLO
 import tempfile
 from fastapi import Form
+from  URL_Generator import upload_image_to_supabase
 app = FastAPI()
 # ----------------------
 # all functions
@@ -100,14 +101,13 @@ def predict_pothole(image, model_path="pothole_yolov8_best.pt", min_conf=0.1):
 
 @app.post("/add_problem")
 async def add_problem(
-     image: UploadFile = File(...), 
-    uid: int = Body(...),
-    email: str = Body(...),
-    # photo: Optional[str] = Form(None),
-    IssueType: Optional[str] = Body(None),
-    Description: Optional[str] = Body(None),
-    Latitude: Optional[str] = Body(None),
-    Longitude: Optional[str] = Body(None)
+    uid: int = Form(...),
+    email: str = Form(...),
+    IssueType: Optional[str] = Form(None),
+    Description: Optional[str] = Form(None),
+    Latitude: Optional[str] = Form(None),
+    Longitude: Optional[str] = Form(None),
+    image: UploadFile = File(...)
 ):
     try:
         # --------------------------
@@ -117,7 +117,7 @@ async def add_problem(
         nparr = np.frombuffer(img_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         result = predict_pothole(img)  # {"severity": ..., "confidence": ...}
-
+        url = upload_image_to_supabase(image)
         # --------------------------
         # Get nearby amenities counts
         # --------------------------
@@ -157,7 +157,7 @@ async def add_problem(
         data = {
             "uid":uid,
             "email": email,
-            # "photo": photo,
+            "photo": url,
             "IssueType": IssueType,
             "Description": Description,
             "Latitude": Latitude,
