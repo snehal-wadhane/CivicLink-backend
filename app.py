@@ -95,8 +95,7 @@ def predict_pothole(image, model_path="pothole_yolov8_best.pt", min_conf=0.1):
 
 @app.post("/add_problem")
 async def add_problem(
-    image: UploadFile = File(...),
-    pid: int = Body(...),
+    image: UploadFile = File(...), 
     uid: int = Body(...),
     email: str = Body(...),
     photo: Optional[str] = Body(None),
@@ -104,8 +103,6 @@ async def add_problem(
     Description: Optional[str] = Body(None),
     Latitude: Optional[str] = Body(None),
     Longitude: Optional[str] = Body(None),
-    status: Optional[str] = Body(None),
-    severity: Optional[int] = Body(None),
 ):
     try:
         # --------------------------
@@ -153,7 +150,6 @@ async def add_problem(
         # Prepare data for database
         # --------------------------
         data = {
-            "pid": pid,
             "uid":uid,
             "email": email,
             "photo": photo,
@@ -161,8 +157,8 @@ async def add_problem(
             "Description": Description,
             "Latitude": Latitude,
             "Longitude": Longitude,
-            "status": status,
-            "severity_score": final_score,
+            "status": "Issue Created",
+            "severity_status": final_score,
             "overall_severity": overall_severity,
         }
 
@@ -171,6 +167,7 @@ async def add_problem(
 
         return {
             "status": "success",
+            "pid":response.pid,
             "data": response.data,
             "predicted_pothole": result,
             "nearby_counts": nearby_counts,
@@ -204,7 +201,64 @@ async def get_users(longitude: float= Body(None), latitude: float= Body(None)):
             continue
     return {"status": "success", "data": nearby}
 
+# ✅ Fetch problem by ID (primary key)
+@app.get("/by_id/{uid}")
+async def get_by_id(uid: int):
+    try:
+        response = supabase.table("problems").select("*").eq("pid", uid).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Problem not found")
+        return {"status": "success", "data": response.data[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+
+# ✅ Update problem by ID
+@app.put("/update_id/{pid}")
+async def by_update_id(pid: int, updated_data: dict = Body(...)):
+    try:
+        response = supabase.table("problems").update(updated_data).eq("pid", pid).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Problem not found for update")
+        return {"status": "success", "updated": response.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+
+
+# ✅ Delete problem by ID
+@app.delete("/delete_id/{uid}")
+async def by_delete_id(uid: int):
+    try:
+        response = supabase.table("problems").delete().eq("pid", uid).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Problem not found for delete")
+        return {"status": "success", "deleted": response.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+
+    
 @app.get("/fetchall/")
 async def get_users():
     response = supabase.table("problems").select("*").execute()
     return {"status": "success", "data": response.data}
+
+@app.post("/add_user")
+async def add_user(email: str = Body(...), password: str = Body(...)):
+    try:
+        # Insert user into Supabase "Users" table
+        response = supabase.table("Users").insert({
+            "email": email,
+            "password": password  # ⚠️ Plaintext for now (better: hash it with bcrypt)
+        }).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=400, detail="User not created")
+
+        # Assuming "uid" is the primary key column
+        uid = response.data[0].get("uid")
+
+        return {"uid": uid}
+
+    except postgrest.exceptions.APIError as e:
+        raise HTTPException(status_code=400, detail=f"Supabase API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
