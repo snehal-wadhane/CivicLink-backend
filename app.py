@@ -97,6 +97,7 @@ def predict_pothole(image, model_path="pothole_yolov8_best.pt", min_conf=0.1):
 async def add_problem(
     image: UploadFile = File(...),
     pid: int = Body(...),
+    uid: int = Body(...),
     email: str = Body(...),
     photo: Optional[str] = Body(None),
     IssueType: Optional[str] = Body(None),
@@ -153,6 +154,7 @@ async def add_problem(
         # --------------------------
         data = {
             "pid": pid,
+            "uid":uid,
             "email": email,
             "photo": photo,
             "IssueType": IssueType,
@@ -165,7 +167,7 @@ async def add_problem(
         }
 
         # Insert into Supabase
-        response = supabase.table("all_problems").insert(data).execute()
+        response = supabase.table("problems").insert(data).execute()
 
         return {
             "status": "success",
@@ -187,7 +189,7 @@ async def add_problem(
 @app.get("/fetch_by_location/")
 async def get_users(longitude: float= Body(None), latitude: float= Body(None)):
     # Fetch all problems
-    response = supabase.table("all_problems").select("*").execute()
+    response = supabase.table("problems").select("*").execute()
     all_data = response.data
     # Filter by 0.5 km radius
     nearby = []
@@ -204,5 +206,5 @@ async def get_users(longitude: float= Body(None), latitude: float= Body(None)):
 
 @app.get("/fetchall/")
 async def get_users():
-    response = supabase.table("all_problems").select("*").execute()
+    response = supabase.table("problems").select("*").execute()
     return {"status": "success", "data": response.data}
