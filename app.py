@@ -12,6 +12,7 @@ from ultralytics import YOLO
 import tempfile
 from fastapi import Form
 from  URL_Generator import upload_image_to_supabase
+
 app = FastAPI()
 # ----------------------
 # all functions
@@ -117,7 +118,14 @@ async def add_problem(
         nparr = np.frombuffer(img_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         result = predict_pothole(img)  # {"severity": ..., "confidence": ...}
-        url = upload_image_to_supabase(image)
+        img_bytes = await image.read()
+
+# Create a temporary file to store the uploaded image
+        suffix = f".{image.filename.split('.')[-1]}"  # preserves original extension
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+            tmp_file.write(img_bytes)
+            tmp_path = tmp_file.name
+        url = upload_image_to_supabase(tmp_path)
         # --------------------------
         # Get nearby amenities counts
         # --------------------------
