@@ -1,0 +1,6 @@
+pip install fastapi
+uvicorn app:app --reload
+CivicLink – Connecting Citizens, Government & Society
+ALTER TABLE problems DISABLE ROW LEVEL SECURITY;
+add overall sevirity in database column
+pip freeze > requirements.txt
