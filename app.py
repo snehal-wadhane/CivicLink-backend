@@ -101,13 +101,13 @@ def predict_pothole(image, model_path="pothole_yolov8_best.pt", min_conf=0.1):
 @app.post("/add_problem")
 async def add_problem(
      image: UploadFile = File(...), 
-    uid: int = Form(...),
-    email: str = Form(...),
+    uid: int = Body(...),
+    email: str = Body(...),
     # photo: Optional[str] = Form(None),
-    IssueType: Optional[str] = Form(None),
-    Description: Optional[str] = Form(None),
-    Latitude: Optional[str] = Form(None),
-    Longitude: Optional[str] = Form(None)
+    IssueType: Optional[str] = Body(None),
+    Description: Optional[str] = Body(None),
+    Latitude: Optional[str] = Body(None),
+    Longitude: Optional[str] = Body(None)
 ):
     try:
         # --------------------------
