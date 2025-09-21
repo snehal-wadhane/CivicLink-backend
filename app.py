@@ -10,6 +10,7 @@ import numpy as np
 import cv2
 from ultralytics import YOLO
 import tempfile
+from fastapi import Form
 app = FastAPI()
 # ----------------------
 # all functions
@@ -99,14 +100,14 @@ def predict_pothole(image, model_path="pothole_yolov8_best.pt", min_conf=0.1):
 
 @app.post("/add_problem")
 async def add_problem(
-    image: UploadFile = File(...), 
-    uid: int = Body(...),
-    email: str = Body(...),
-    photo: Optional[str] = Body(None),
-    IssueType: Optional[str] = Body(None),
-    Description: Optional[str] = Body(None),
-    Latitude: Optional[str] = Body(None),
-    Longitude: Optional[str] = Body(None),
+     image: UploadFile = File(...), 
+    uid: int = Form(...),
+    email: str = Form(...),
+    # photo: Optional[str] = Form(None),
+    IssueType: Optional[str] = Form(None),
+    Description: Optional[str] = Form(None),
+    Latitude: Optional[str] = Form(None),
+    Longitude: Optional[str] = Form(None)
 ):
     try:
         # --------------------------
@@ -156,7 +157,7 @@ async def add_problem(
         data = {
             "uid":uid,
             "email": email,
-            "photo": photo,
+            # "photo": photo,
             "IssueType": IssueType,
             "Description": Description,
             "Latitude": Latitude,
@@ -249,7 +250,7 @@ async def get_users():
 async def add_user(email: str = Body(...), password: str = Body(...)):
     try:
         # Insert user into Supabase "Users" table
-        response = supabase.table("Users").insert({
+        response = supabase.table("users").insert({
             "email": email,
             "password": password  # ⚠️ Plaintext for now (better: hash it with bcrypt)
         }).execute()
