@@ -1,11 +1,10 @@
-from fastapi import FastAPI, Body, HTTPException,Query
+from fastapi import FastAPI, Body, HTTPException,Query,File, UploadFile
 from database import supabase  
 from typing import Optional
 import math
 import requests
 import postgrest
 from ultralytics import YOLO
-from fastapi import FastAPI, File, UploadFile
 import numpy as np
 import cv2
 from ultralytics import YOLO
@@ -14,10 +13,17 @@ from fastapi import Form
 from  URL_Generator import upload_image_to_supabase,download_image_from_url
 from fastapi import BackgroundTasks
 from fastapi.responses import StreamingResponse
-import requests
+from fastapi.middleware.cors import CORSMiddleware
 import base64
 from io import BytesIO
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # for dev: allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # ----------------------
 # all functions
 # ----------------------
@@ -253,10 +259,10 @@ async def get_users():
 @app.get("/by_id/{uid}")
 async def get_by_id(uid: int):
     try:
-        response = supabase.table("problems").select("*").eq("pid", uid).execute()
+        response = supabase.table("problems").select("*").eq("uid", uid).execute()
         if not response.data:
             raise HTTPException(status_code=404, detail="Problem not found")
-        return {"status": "success", "data": response.data[0]}
+        return {"status": "success", "data": response.data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
 
@@ -284,8 +290,6 @@ async def by_delete_id(pid: int):
         raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
 
     
-
-
 @app.post("/add_user")
 async def add_user(email: str = Body(...), password: str = Body(...)):
     try:
