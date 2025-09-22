@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Body, HTTPException
+from fastapi import FastAPI, Body, HTTPException,Query
 from database import supabase  
 from typing import Optional
 import math
@@ -19,16 +19,7 @@ app = FastAPI()
 # ----------------------
 @app.get("/")
 def root():
-    return {"message": "CivicLink backend running!"}
-
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371  # Earth radius in km
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = math.sin(dlat/2) ** 2 + math.cos(math.radians(lat1)) * \
-        math.cos(math.radians(lat2)) * math.sin(dlon/2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c 
+    return {"message": "CivicLink backend running!"} 
 def get_osm_nearby_count(lat, lon, amenity_type, radius=500):
     """
     Fetch count of nearby OSM amenities using Overpass API
@@ -173,25 +164,64 @@ def process_problem(pid: int, img_bytes: bytes, Latitude: str, Longitude: str):
 # ----------------------
 # Example route: Fetch all users
 # ----------------------   
+import base64
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371  # Earth radius in km
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2) ** 2 + math.cos(math.radians(lat1)) * \
+        math.cos(math.radians(lat2)) * math.sin(dlon/2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c 
+
 @app.get("/fetch_by_location/")
-async def get_users(longitude: float= Body(None), latitude: float= Body(None)):
+async def get_users(
+    longitude: float = Query(..., description="Longitude of current location"),
+    latitude: float = Query(..., description="Latitude of current location")
+):
     # Fetch all problems
     response = supabase.table("problems").select("*").execute()
     all_data = response.data
-    # Filter by 0.5 km radius
+
     nearby = []
     for item in all_data:
         try:
             item_lat = float(item.get("Latitude", 0))
             item_lon = float(item.get("Longitude", 0))
             distance = haversine(latitude, longitude, item_lat, item_lon)
-            if distance <= 0.5:  # within 500m
-                nearby.append(item)
-        except:
+            if distance <= 0.5:  # within 0.5 km
+                # Download image and convert to base64
+                image_url = item.get("photo")
+                image_base64 = None
+                if image_url:
+                    try:
+                        r = requests.get(image_url, timeout=5)
+                        if r.status_code == 200:
+                            image_base64 = base64.b64encode(r.content).decode("utf-8")
+                    except:
+                        pass
+                item_copy = item.copy()
+                item_copy["photo_base64"] = image_base64
+                nearby.append(item_copy)
+        except Exception:
             continue
+
     return {"status": "success", "data": nearby}
 
+from fastapi.responses import StreamingResponse
+from io import BytesIO
+ 
+@app.get("/get_image/{pid}")
+def get_image(pid: int):
+    # fetch problem from DB
+    response = supabase.table("problems").select("photo").eq("pid", pid).execute()
+    if not response.data:
+        return {"error": "Problem not found"}
+    image_url = response.data[0]["photo"]
+    r = requests.get(image_url, stream=True)
+    return StreamingResponse(r.raw, media_type="image/png")
 # ✅ Fetch problem by ID (primary key)
+
 @app.get("/by_id/{uid}")
 async def get_by_id(uid: int):
     try:

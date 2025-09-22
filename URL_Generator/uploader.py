@@ -59,18 +59,18 @@ def upload_image_to_supabase(file_bytes: bytes, file_ext: str) -> str:
 
 import requests
 
-def download_image_from_url(url: str) -> bytes:
-    """
-    Download an image from a URL and return it as bytes.
-    """
-    # Clean URL (remove trailing ? if present)
-    clean_url = url.split("?")[0]
+import requests
+import numpy as np
+import cv2
 
-    response = requests.get(clean_url, headers={
-        "User-Agent": "Mozilla/5.0"
-    }, timeout=10)
+def download_image_from_url(url: str):
+    """
+    Downloads an image from Supabase public URL and decodes it into OpenCV format.
+    """
+    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
 
     if response.status_code != 200:
-        raise Exception(f"Failed to download image. Status code: {response.status_code}")
+        raise Exception(f"Failed to download image. Status code: {response.status_code}, URL: {url}")
 
-    return response.content  # return bytes directly
+    img_array = np.frombuffer(response.content, np.uint8)
+    return cv2.imdecode(img_array, cv2.IMREAD_COLOR)
