@@ -31,16 +31,20 @@ app.add_middleware(
 def root():
     return {"message": "CivicLink backend running!"}
 
+import requests
+
+OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",        # Germany
+    "https://lz4.overpass-api.de/api/interpreter",    # Germany mirror
+    "https://overpass.kumi.systems/api/interpreter",  # Finland
+    "https://overpass.openstreetmap.ru/api/interpreter", # Russia
+]
+
 def get_osm_nearby_count(lat, lon, amenity_type, radius=500):
     """
     Fetch count of nearby OSM amenities using Overpass API
-    :param lat: Latitude
-    :param lon: Longitude
-    :param amenity_type: 'hospital', 'school', 'bank', etc.
-    :param radius: in meters
-    :return: total count of nearby places
+    Rotates between mirrors for reliability
     """
-    overpass_url = "https://overpass-api.de/api/interpreter"
     overpass_query = f"""
     [out:json];
     (
@@ -48,16 +52,27 @@ def get_osm_nearby_count(lat, lon, amenity_type, radius=500):
       way["amenity"="{amenity_type}"](around:{radius},{lat},{lon});
       relation["amenity"="{amenity_type}"](around:{radius},{lat},{lon});
     );
-    out count;
+    out;
     """
-    response = requests.get(overpass_url, params={'data': overpass_query})
-    data = response.json()
-    
-    # Count number of elements returned
-    count = 0
-    if "elements" in data:
-        count = sum(1 for el in data["elements"] if el["type"] in ["node", "way", "relation"])
-    return count
+
+    for url in OVERPASS_URLS:
+        try:
+            response = requests.get(url, params={'data': overpass_query}, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+
+            # Keep your same count logic
+            count = 0
+            if "elements" in data:
+                count = sum(1 for el in data["elements"] if el["type"] in ["node", "way", "relation"])
+            return count
+
+        except Exception as e:
+            print(f"Overpass API mirror failed: {url}, error: {e}")
+            continue  # Try next mirror
+
+    # If all mirrors fail
+    raise Exception("All Overpass API mirrors failed.")
 
 
 # Your existing prediction function
