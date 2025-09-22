@@ -13,7 +13,7 @@ SUPABASE_SECRET = os.environ.get("SUPABASE_SECRET")  # make sure spelling matche
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SECRET)
 
 # Bucket name
-bucket_name = "problem_image"
+bucket_name = "product_image"
 
 import uuid
 from database import supabase  # your supabase client
