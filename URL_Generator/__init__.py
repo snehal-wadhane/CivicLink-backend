@@ -1,1 +1,1 @@
-from .uploader import upload_image_to_supabase
+from .uploader import upload_image_to_supabase,download_image_from_url

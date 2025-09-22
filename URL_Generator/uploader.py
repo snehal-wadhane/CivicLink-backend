@@ -18,54 +18,59 @@ bucket_name = "problem_image"
 import uuid
 from database import supabase  # your supabase client
 
-def upload_image_to_supabase(file_path: str) -> str:
-    """
-    Uploads a local file to Supabase Storage and returns the public URL
-    """
+# def upload_image_to_supabase(file_path: str):
+#     # Read the file
+#     with open(file_path, "rb") as f:
+#         file_bytes = f.read()
+
+#     # Generate unique filename
+#     file_ext = file_path.split(".")[-1]
+#     file_name = f"{uuid.uuid4()}.{file_ext}"
+
+#     try:
+#         # Upload the file
+#         res = supabase.storage.from_(bucket_name).upload(file_name, file_bytes)
+        
+#         # Check if the upload was successful
+#         # The 'res' object itself indicates success or failure via exceptions
+#         print(f"File uploaded successfully to path: {res.path}")
+#     except Exception as e:
+#         # Catch any exceptions raised during the upload process
+#         raise Exception(f"Upload failed: {e}")
+
+#     # Get public URL
+#     public_url = supabase.storage.from_(bucket_name).get_public_url(file_name)
+#     return public_url
+
+def upload_image_to_supabase(file_bytes: bytes, file_ext: str) -> str:
     # Generate unique filename
-    file_ext = file_path.split(".")[-1]
     file_name = f"{uuid.uuid4()}.{file_ext}"
 
-    # Read file bytes
-    with open(file_path, "rb") as f:
-        file_bytes = f.read()
-
-    # Upload file
-    res = supabase.storage.from_("problem_image").upload(file_name, file_bytes)
-
-    # Supabase Python client raises exception if upload fails
-    # If successful, res.path contains uploaded path
-    uploaded_path = res.path  # <-- correct attribute
+    try:
+        # Upload the file directly from bytes
+        supabase.storage.from_(bucket_name).upload(file_name, file_bytes)
+        print(f"File uploaded successfully: {file_name}")
+    except Exception as e:
+        raise Exception(f"Upload failed: {e}")
 
     # Get public URL
-    public_url = supabase.storage.from_("problem_image").get_public_url(uploaded_path)
-
+    public_url = supabase.storage.from_(bucket_name).get_public_url(file_name)
     return public_url
 
+import requests
 
-def download_image_from_url(url: str, save_path: str = None) -> str:
+def download_image_from_url(url: str) -> bytes:
     """
-    Download an image from a URL and save it locally.
-
-    Args:
-        url (str): The image URL.
-        save_path (str, optional): Local path to save the image. 
-            If not provided, saves in current directory with original filename.
-
-    Returns:
-        str: Path of the saved image.
+    Download an image from a URL and return it as bytes.
     """
-    response = requests.get(url)
+    # Clean URL (remove trailing ? if present)
+    clean_url = url.split("?")[0]
+
+    response = requests.get(clean_url, headers={
+        "User-Agent": "Mozilla/5.0"
+    }, timeout=10)
+
     if response.status_code != 200:
         raise Exception(f"Failed to download image. Status code: {response.status_code}")
 
-    # Determine filename
-    if save_path is None:
-        filename = url.split("/")[-1]
-        save_path = filename
-
-    # Save the image
-    with open(save_path, "wb") as f:
-        f.write(response.content)
-
-    return save_path
+    return response.content  # return bytes directly

@@ -11,7 +11,7 @@ import cv2
 from ultralytics import YOLO
 import tempfile
 from fastapi import Form
-from  URL_Generator import upload_image_to_supabase
+from  URL_Generator import upload_image_to_supabase,download_image_from_url
 
 app = FastAPI()
 # ----------------------
@@ -100,98 +100,78 @@ def predict_pothole(image, model_path="pothole_yolov8_best.pt", min_conf=0.1):
     
     return {"severity": image_category, "confidence": avg_confidence}
 
+from fastapi import BackgroundTasks
+
 @app.post("/add_problem")
 async def add_problem(
-    uid: int = Form(...),
-    email: str = Form(...),
-    IssueType: Optional[str] = Form(None),
-    Description: Optional[str] = Form(None),
-    Latitude: Optional[str] = Form(None),
-    Longitude: Optional[str] = Form(None),
-    image: UploadFile = File(...)
+    background_tasks: BackgroundTasks,
+    uid: int = Body(...),
+    email: str = Body(...),
+    IssueType: Optional[str] = Body(None),
+    Description: Optional[str] = Body(None),
+    Latitude: Optional[str] = Body(None),
+    Longitude: Optional[str] = Body(None),
+    image:str= Body(None)
 ):
     try:
-        # --------------------------
-        # Read image and predict pothole
-        # --------------------------
+        # Read image bytes
         img_bytes = await image.read()
-        nparr = np.frombuffer(img_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        result = predict_pothole(img)  # {"severity": ..., "confidence": ...}
-        img_bytes = await image.read()
+        file_ext = image.filename.split(".")[-1]
 
-# Create a temporary file to store the uploaded image
-        suffix = f".{image.filename.split('.')[-1]}"  # preserves original extension
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
-            tmp_file.write(img_bytes)
-            tmp_path = tmp_file.name
-        url = upload_image_to_supabase(tmp_path)
-        # --------------------------
-        # Get nearby amenities counts
-        # --------------------------
-        nearby_counts = {}
-        if Latitude and Longitude:
-            lat = float(Latitude)
-            lon = float(Longitude)
-            for amenity in ["hospital", "school", "bank", "university"]:
-                nearby_counts[amenity] = get_osm_nearby_count(lat, lon, amenity, radius=500)
-
-        # --------------------------
-        # Severity scoring rules
-        # --------------------------
-        pothole_weights = {"minor_pothole": 1, "medium_pothole": 2, "major_pothole": 3}
-        amenity_weights = {"hospital": 3, "school": 2, "bank": 1, "university": 2}
-
-        # Pothole factor (type * confidence)
-        pothole_factor = pothole_weights.get(result["severity"], 0) * result["confidence"]
-
-        # Amenity factor (weighted sum normalized)
-        amenity_factor = sum(nearby_counts[a] * w for a, w in amenity_weights.items()) / 10
-
-        # Final severity score
-        final_score = pothole_factor + amenity_factor
-
-        # Classify overall severity
-        if final_score < 1.5:
-            overall_severity = "Low"
-        elif final_score < 3:
-            overall_severity = "Moderate"
-        else:
-            overall_severity = "High"
-
-        # --------------------------
-        # Prepare data for database
-        # --------------------------
+        url = upload_image_to_supabase(img_bytes, file_ext)
+        # Insert basic problem row in DB (fast)
         data = {
-            "uid":uid,
+            "uid": uid,
             "email": email,
             "photo": url,
             "IssueType": IssueType,
             "Description": Description,
             "Latitude": Latitude,
             "Longitude": Longitude,
-            "status": "Issue Created",
-            "severity_status": final_score,
-            "overall_severity": overall_severity,
+            "status": "Issue created",
+            "severity_status": None,
+            "overall_severity": None,
         }
-
-        # Insert into Supabase
         response = supabase.table("problems").insert(data).execute()
+        pid = response.data[0]["pid"]  # Assuming table has `id` primary key
 
-        return {
-            "status": "success",
-            "pid":response.pid,
-            "data": response.data,
-            "predicted_pothole": result,
-            "nearby_counts": nearby_counts,
-            "severity_score": final_score,
-            "overall_severity": overall_severity
-        }
+        # Add background task for heavy processing
+        background_tasks.add_task(process_problem, pid, img_bytes, Latitude, Longitude)
 
-    except postgrest.exceptions.APIError as e:
-        raise HTTPException(status_code=400, detail=f"Supabase API error: {e}")
+        return {"status": "success", "pid": pid}
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def process_problem(pid: int, img_bytes: bytes, Latitude: str, Longitude: str):
+    # Run YOLO model
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    result = predict_pothole(img)
+
+    # Get OSM amenities
+    nearby_counts = {}
+    if Latitude and Longitude:
+        lat, lon = float(Latitude), float(Longitude)
+        for amenity in ["hospital", "school", "bank", "university"]:
+            nearby_counts[amenity] = get_osm_nearby_count(lat, lon, amenity, radius=500)
+
+    # Calculate severity score
+    pothole_weights = {"minor_pothole": 1, "medium_pothole": 2, "major_pothole": 3}
+    amenity_weights = {"hospital": 3, "school": 2, "bank": 1, "university": 2}
+    pothole_factor = pothole_weights.get(result["severity"], 0) * result["confidence"]
+    amenity_factor = sum(nearby_counts[a] * w for a, w in amenity_weights.items()) / 10
+    final_score = pothole_factor + amenity_factor
+    overall_severity = (
+        "Low" if final_score < 1.5 else "Moderate" if final_score < 3 else "High"
+    )
+
+    # Update Supabase record
+    supabase.table("problems").update({
+        "severity_status": final_score,
+        "overall_severity": overall_severity,
+    }).eq("pid", pid).execute()
 
 # ----------------------
 # Example route: Fetch all users
@@ -238,10 +218,10 @@ async def by_update_id(pid: int, updated_data: dict = Body(...)):
 
 
 # ✅ Delete problem by ID
-@app.delete("/delete_id/{uid}")
-async def by_delete_id(uid: int):
+@app.delete("/delete_id/{pid}")
+async def by_delete_id(pid: int):
     try:
-        response = supabase.table("problems").delete().eq("pid", uid).execute()
+        response = supabase.table("problems").delete().eq("pid", pid).execute()
         if not response.data:
             raise HTTPException(status_code=404, detail="Problem not found for delete")
         return {"status": "success", "deleted": response.data}
